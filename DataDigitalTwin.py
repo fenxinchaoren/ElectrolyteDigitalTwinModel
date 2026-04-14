@@ -6,6 +6,7 @@ from statistics import median
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_CHANGE_DIR = BASE_DIR / "DataChange"
+TIME_COLUMN = "_time"
 TARGET_COLUMN = "SetFrequencylPumpSet1"
 FLOW_PROCESSED_COLUMN = "ActFlowPumpSET1_process"
 ACTUAL_COLUMN = "Actual_Pump_SET1"
@@ -266,13 +267,22 @@ def process_csv_file(file_path):
             if len(row) > removable_index:
                 row.pop(removable_index)
 
-    new_header = [TARGET_COLUMN, FLOW_PROCESSED_COLUMN] + header
+    insert_index = header.index(TIME_COLUMN) + 1 if TIME_COLUMN in header else 0
+    new_header = (
+        header[:insert_index]
+        + [TARGET_COLUMN, FLOW_PROCESSED_COLUMN]
+        + header[insert_index:]
+    )
     new_rows = []
 
     for row, generated_value, processed_flow_value in zip(
         data_rows, generated_values, processed_flow_values
     ):
-        new_rows.append([generated_value, processed_flow_value] + row)
+        new_rows.append(
+            row[:insert_index]
+            + [generated_value, processed_flow_value]
+            + row[insert_index:]
+        )
 
     with file_path.open("w", newline="", encoding="utf-8-sig") as target_file:
         writer = csv.writer(target_file)
