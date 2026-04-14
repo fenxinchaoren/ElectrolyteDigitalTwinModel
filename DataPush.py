@@ -19,7 +19,7 @@ else:
 
 
 BASE_DIR = Path(__file__).resolve().parent
-CSV_DIRECTORIES = [BASE_DIR / "Data", BASE_DIR / "DataChange"]
+CSV_DIRECTORIES = [BASE_DIR / "DataChange"]
 TIME_COLUMN = "_time"
 DATETIME_OUTPUT_FORMAT = "%Y-%m-%d %H:%M:%S"
 DATETIME_INPUT_FORMATS = (
@@ -32,9 +32,11 @@ DATETIME_INPUT_FORMATS = (
 )
 BOOL_NAME_KEYWORDS = ("on", "open", "closed", "close", "enable", "enabled", "flag", "status")
 INT_NAME_KEYWORDS = ("count", "index", "idx", "num", "number", "seq", "step", "levelcode")
-INSERT_BATCH_SIZE = 500
+INSERT_BATCH_SIZE = 5000
 RECREATE_TABLES = True
 MYSQL_IDENTIFIER_MAX_LENGTH = 64
+SCHEMA_SAMPLE_SIZE = 2000
+USE_LOAD_DATA_LOCAL = True
 
 DATABASE_CONFIG = {
     "mark": "sya_zhiqing_djyflow",
@@ -56,6 +58,7 @@ def get_connection():
             database=DATABASE_CONFIG["db"],
             charset="utf8mb4",
             autocommit=False,
+            local_infile=True,
         )
 
     if mysql is not None:
@@ -66,6 +69,7 @@ def get_connection():
             port=DATABASE_CONFIG["port"],
             database=DATABASE_CONFIG["db"],
             charset="utf8mb4",
+            allow_local_infile=True,
         )
 
     raise ImportError(
@@ -261,6 +265,19 @@ def read_csv_file(file_path):
     return headers, rows
 
 
+def read_csv_headers_and_samples(file_path, sample_size=SCHEMA_SAMPLE_SIZE):
+    with file_path.open("r", newline="", encoding="utf-8-sig") as source_file:
+        reader = csv.DictReader(source_file)
+        headers = reader.fieldnames or []
+        sample_rows = []
+        for row in reader:
+            if len(sample_rows) >= sample_size:
+                break
+            sample_rows.append({header: clean_cell(row.get(header)) for header in headers})
+
+    return headers, sample_rows
+
+
 def build_schema(headers, rows):
     return {
         header: infer_column_type(header, [row.get(header, "") for row in rows])
@@ -296,6 +313,49 @@ def batch_iterable(items, batch_size):
         yield items[index : index + batch_size]
 
 
+def build_datetime_load_expr(variable_name):
+    sanitized_value = f"NULLIF(TRIM({variable_name}), '')"
+    return (
+        "COALESCE("
+        f"STR_TO_DATE(REPLACE({sanitized_value}, 'T', ' '), '%Y-%m-%d %H:%i:%s'), "
+        f"STR_TO_DATE(REPLACE({sanitized_value}, 'T', ' '), '%Y/%m/%d %H:%i:%s'), "
+        f"STR_TO_DATE(REPLACE({sanitized_value}, 'T', ' '), '%Y-%m-%d %H:%i')"
+        ")"
+    )
+
+
+def build_load_value_expression(variable_name, column_type):
+    sanitized_value = f"NULLIF(TRIM({variable_name}), '')"
+    if column_type == "DATETIME":
+        return build_datetime_load_expr(variable_name)
+    if column_type in {"TINYINT(1)", "INT", "FLOAT", "VARCHAR(255)"}:
+        return sanitized_value
+    return sanitized_value
+
+
+def load_rows_with_local_infile(cursor, table_name, headers, schema, column_name_map, file_path):
+    variable_names = [f"@v{index}" for index in range(1, len(headers) + 1)]
+    variable_sql = ", ".join(variable_names)
+    set_sql = ", ".join(
+        f"{quote_identifier(column_name_map[header])} = "
+        f"{build_load_value_expression(variable_name, schema[header])}"
+        for header, variable_name in zip(headers, variable_names)
+    )
+    file_sql_path = str(file_path.resolve()).replace("\\", "/").replace("'", "''")
+    load_sql = (
+        f"LOAD DATA LOCAL INFILE '{file_sql_path}' "
+        f"INTO TABLE {quote_identifier(table_name)} "
+        "CHARACTER SET utf8mb4 "
+        "FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"' "
+        "LINES TERMINATED BY '\\n' "
+        "IGNORE 1 LINES "
+        f"({variable_sql}) "
+        f"SET {set_sql}"
+    )
+    cursor.execute(load_sql)
+    return cursor.rowcount
+
+
 def insert_rows(connection, cursor, table_name, headers, schema, rows, column_name_map):
     if not rows:
         return
@@ -323,22 +383,36 @@ def insert_rows(connection, cursor, table_name, headers, schema, rows, column_na
 
     for batch in batch_iterable(payload, INSERT_BATCH_SIZE):
         cursor.executemany(insert_sql, batch)
-        connection.commit()
+    connection.commit()
 
 
 def import_csv_file(connection, file_path):
-    headers, rows = read_csv_file(file_path)
+    headers, sample_rows = read_csv_headers_and_samples(file_path)
     if not headers:
         print(f"Skip empty header file: {file_path.name}")
         return
 
     table_name = file_path.stem
-    schema = build_schema(headers, rows)
+    schema = build_schema(headers, sample_rows)
     column_name_map = build_identifier_map(headers)
+    imported_rows = None
 
     with connection.cursor() as cursor:
         create_table(cursor, table_name, headers, schema, column_name_map)
-        insert_rows(connection, cursor, table_name, headers, schema, rows, column_name_map)
+        if USE_LOAD_DATA_LOCAL:
+            try:
+                imported_rows = load_rows_with_local_infile(
+                    cursor, table_name, headers, schema, column_name_map, file_path
+                )
+                connection.commit()
+            except Exception as exc:
+                connection.rollback()
+                print(f"LOAD DATA fallback for {file_path.name}: {exc}")
+
+        if imported_rows is None:
+            _, rows = read_csv_file(file_path)
+            insert_rows(connection, cursor, table_name, headers, schema, rows, column_name_map)
+            imported_rows = len(rows)
 
     renamed_columns = [
         (source_name, target_name)
@@ -350,7 +424,7 @@ def import_csv_file(connection, file_path):
         for source_name, target_name in renamed_columns:
             print(f"  {source_name} -> {target_name}")
 
-    print(f"Imported {file_path.name} -> {table_name} ({len(rows)} rows)")
+    print(f"Imported {file_path.name} -> {table_name} ({imported_rows} rows)")
 
 
 def iter_csv_files():
@@ -366,7 +440,7 @@ def iter_csv_files():
 def main():
     csv_files = list(iter_csv_files())
     if not csv_files:
-        print("No CSV files found in Data or DataChange.")
+        print("No CSV files found in DataChange.")
         return
 
     print(
