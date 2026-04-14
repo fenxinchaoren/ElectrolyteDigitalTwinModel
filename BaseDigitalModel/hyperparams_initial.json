@@ -1,0 +1,45 @@
+{
+  "correct_hyperparams_initial":{
+
+    "correct_mode_initial": {
+      "manual_flag_initial": 0,
+      "download_flag_initial": 0
+    },
+
+    "online_struc_initial": {
+      "timestep_initial": 6,
+      "n_hidden_initial": 160,
+      "n_layer_initial": 1
+    },
+
+    "correct_condition_initial": {
+      "download_flag_initial": 0,
+      "RMSE_LIM_initial": 30,
+      "MAE_LIM_initial": 20,
+      "MAPE_LIM_initial": 15,
+      "TPR_LIM_initial": 80,
+      "TNR_LIM_initial": 80,
+      "R2_LIM_initial": 80
+    }
+  },
+
+
+  "struc_search_range_initial": {
+    "download_flag_initial": 0,
+    "timesteps_l_initial": 4,
+    "n_hidden_l_initial": 120,
+    "n_layer_l_initial": 1,
+    "timesteps_h_initial": 8,
+    "n_hidden_h_initial": 220,
+    "n_layer_h_initial": 2,
+    "timesteps_search_step_initial": 1,
+    "n_hidden_search_step_initial": 20,
+    "n_layer_search_step_initial": 1,
+    "epochs_initial": 80,
+    "batch_size_initial": 512,
+    "lr_initial": 0.001,
+    "data_amount_initial": 12000,
+    "train_test_dataSplit_initial": 0.8,
+    "forecast_step_initial": 1
+  }
+}

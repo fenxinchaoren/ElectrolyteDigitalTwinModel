@@ -1,0 +1,163 @@
+{
+  "mark": "sya_zhiqing_set1_flowavg",
+  "host": "172.20.68.118",
+  "user": "root",
+  "password": "uwXXsnbcCRk5",
+  "port": 3306,
+  "db": "ec_wlzq",
+  "table": "zhiqing_control_2025-04-16",
+  "tables": [
+    "zhiqing_control_2025-03-07",
+    "zhiqing_control_2025-03-08",
+    "zhiqing_control_2025-03-09",
+    "zhiqing_control_2025-03-10",
+    "zhiqing_control_2025-03-11",
+    "zhiqing_control_2025-03-12",
+    "zhiqing_control_2025-03-13",
+    "zhiqing_control_2025-03-14",
+    "zhiqing_control_2025-03-26",
+    "zhiqing_control_2025-04-10",
+    "zhiqing_control_2025-04-14",
+    "zhiqing_control_2025-04-15",
+    "zhiqing_control_2025-04-16"
+  ],
+  "time_column": "_time",
+  "order_by_column": "_time",
+  "input_output_vars_info": {
+    "output_var": [
+      "string01.ElectrolyteFlowAverage",
+      "string02.ElectrolyteFlowAverage",
+      "string03.ElectrolyteFlowAverage",
+      "string04.ElectrolyteFlowAverage",
+      "string05.ElectrolyteFlowAverage",
+      "string06.ElectrolyteFlowAverage",
+      "string07.ElectrolyteFlowAverage",
+      "string08.ElectrolyteFlowAverage",
+      "string09.ElectrolyteFlowAverage",
+      "string10.ElectrolyteFlowAverage",
+      "string11.ElectrolyteFlowAverage",
+      "string12.ElectrolyteFlowAverage",
+      "string13.ElectrolyteFlowAverage",
+      "string14.ElectrolyteFlowAverage",
+      "string15.ElectrolyteFlowAverage",
+      "string16.ElectrolyteFlowAverage",
+      "string17.ElectrolyteFlowAverage",
+      "string18.ElectrolyteFlowAverage",
+      "string19.ElectrolyteFlowAverage",
+      "string20.ElectrolyteFlowAverage",
+      "string21.ElectrolyteFlowAverage"
+    ],
+    "linearInput_vars_orders": {
+      "SetFrequencylPumpSet1": [
+        4,
+        3,
+        2,
+        1
+      ]
+    },
+    "constant_term": false,
+    "constant_term_value": 5315,
+    "nonlinearInput_vars_orders": {
+      "ActFlowPumpSET1_process": [
+        1
+      ],
+      "Actual_Pump_SET1": [
+        1
+      ],
+      "SET1_Electrolyte_Pressure_After": [
+        1
+      ],
+      "SET1_Electrolyte_Pressure_Before": [
+        1
+      ],
+      "SET1_Electrolyte_Temperature": [
+        1
+      ],
+      "WaterTank_Temperature": [
+        1
+      ],
+      "string01.ActualCurrent": [
+        1
+      ],
+      "string02.ActualCurrent": [
+        1
+      ],
+      "string03.ActualCurrent": [
+        1
+      ],
+      "string04.ActualCurrent": [
+        1
+      ],
+      "string05.ActualCurrent": [
+        1
+      ],
+      "string06.ActualCurrent": [
+        1
+      ],
+      "string07.ActualCurrent": [
+        1
+      ],
+      "string08.ActualCurrent": [
+        1
+      ],
+      "string09.ActualCurrent": [
+        1
+      ],
+      "string10.ActualCurrent": [
+        1
+      ],
+      "string11.ActualCurrent": [
+        1
+      ],
+      "string12.ActualCurrent": [
+        1
+      ],
+      "string13.ActualCurrent": [
+        1
+      ],
+      "string14.ActualCurrent": [
+        1
+      ],
+      "string15.ActualCurrent": [
+        1
+      ],
+      "string16.ActualCurrent": [
+        1
+      ],
+      "string17.ActualCurrent": [
+        1
+      ],
+      "string18.ActualCurrent": [
+        1
+      ],
+      "string19.ActualCurrent": [
+        1
+      ],
+      "string20.ActualCurrent": [
+        1
+      ],
+      "string21.ActualCurrent": [
+        1
+      ]
+    }
+  },
+  "neural_networks_type": {
+    "LSTM": true,
+    "GRU": false,
+    "RNN": false,
+    "GLNRU": false
+  },
+  "compute_device": 0,
+  "model_save_method": {
+    "OSS": {
+      "flag": true
+    },
+    "FTP": {
+      "flag": true,
+      "ftpserver": "172.20.68.55",
+      "port": 21,
+      "usrname": "admin",
+      "pwd": "123123"
+    }
+  }
+}
