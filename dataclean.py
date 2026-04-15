@@ -9,7 +9,10 @@ BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = BASE_DIR / "BaseDigitalModel" / "getData_database_info.json"
 SOURCE_TABLE = "zhiqing_control_runtime"
 TARGET_TABLE = "dataclean"
+AVERAGE_FLOW_COLUMN = "ActualAverageFlow"
+ACTIVE_CLUSTER_COUNT_COLUMN = "ActiveClusterCount"
 INSERT_BATCH_SIZE = 2000
+ACTIVE_CLUSTER_FLOW_THRESHOLD = 3.5
 
 
 def quote_identifier(name):
@@ -57,15 +60,10 @@ def get_all_column_names(cursor, table_name):
     return [column["Field"] for column in get_table_columns(cursor, table_name)]
 
 
-def get_model_columns(database_info):
-    input_output = database_info["input_output_vars_info"]
-    output_columns = input_output["output_var"]
-    current_columns = [
-        name
-        for name in input_output["nonlinearInput_vars_orders"]
-        if name.endswith(".ActualCurrent")
-    ]
-    return output_columns, current_columns
+def get_cluster_flow_columns(column_names):
+    return sorted(
+        [name for name in column_names if name.endswith(".ElectrolyteFlowAverage")]
+    )
 
 
 def create_target_table(cursor):
@@ -73,6 +71,16 @@ def create_target_table(cursor):
     cursor.execute(
         f"CREATE TABLE {quote_identifier(TARGET_TABLE)} "
         f"LIKE {quote_identifier(SOURCE_TABLE)}"
+    )
+    cursor.execute(
+        f"ALTER TABLE {quote_identifier(TARGET_TABLE)} "
+        f"ADD COLUMN {quote_identifier(AVERAGE_FLOW_COLUMN)} DOUBLE NULL "
+        "AFTER `ActFlowPumpSET1_process`"
+    )
+    cursor.execute(
+        f"ALTER TABLE {quote_identifier(TARGET_TABLE)} "
+        f"ADD COLUMN {quote_identifier(ACTIVE_CLUSTER_COUNT_COLUMN)} INT NULL "
+        f"AFTER {quote_identifier(AVERAGE_FLOW_COLUMN)}"
     )
 
 
@@ -94,36 +102,44 @@ def is_contradictory(process_flow, total_output_flow):
     )
 
 
-def should_keep_row(row, output_columns, stats):
+def get_active_cluster_flows(row, cluster_flow_columns):
+    return [
+        normalize_number(row.get(column))
+        for column in cluster_flow_columns
+        if normalize_number(row.get(column)) > ACTIVE_CLUSTER_FLOW_THRESHOLD
+    ]
+
+
+def calculate_actual_average_flow(active_flows):
+    positive_flows = active_flows
+    if not positive_flows:
+        return 0.0
+    return sum(positive_flows) / len(positive_flows)
+
+
+def should_keep_row(row, actual_average_flow, stats):
     set_frequency = normalize_number(row.get("SetFrequencylPumpSet1"))
-    process_flow = normalize_number(row.get("ActFlowPumpSET1_process"))
-    total_output_flow = sum(normalize_number(row.get(column)) for column in output_columns)
 
     if set_frequency <= 0:
         stats["stopped_rows"] += 1
         return False
 
-    if process_flow <= 0:
-        stats["low_process_rows"] += 1
-        return False
-
-    if total_output_flow <= 0:
-        stats["low_output_rows"] += 1
-        return False
-
-    if is_contradictory(process_flow, total_output_flow):
-        stats["contradictory_rows"] += 1
+    if actual_average_flow <= 0:
+        stats["zero_average_flow_rows"] += 1
         return False
 
     return True
 
 
 def clean_runtime_table(database_info):
-    output_columns, _ = get_model_columns(database_info)
-
     with get_connection(database_info) as connection:
         with connection.cursor() as cursor:
             column_names = get_all_column_names(cursor, SOURCE_TABLE)
+            cluster_flow_columns = get_cluster_flow_columns(column_names)
+            if not cluster_flow_columns:
+                raise ValueError(
+                    f"No cluster flow columns like stringXX.ElectrolyteFlowAverage found in {SOURCE_TABLE}."
+                )
             create_target_table(cursor)
 
             cursor.execute(
@@ -136,26 +152,31 @@ def clean_runtime_table(database_info):
                 "source_rows": 0,
                 "kept_rows": 0,
                 "stopped_rows": 0,
-                "low_process_rows": 0,
-                "low_output_rows": 0,
-                "contradictory_rows": 0,
+                "zero_average_flow_rows": 0,
             }
             batch_rows = []
+            insert_column_names = column_names + [AVERAGE_FLOW_COLUMN, ACTIVE_CLUSTER_COUNT_COLUMN]
 
             for row in cursor.fetchall():
                 stats["source_rows"] += 1
-                if not should_keep_row(row, output_columns, stats):
+                active_flows = get_active_cluster_flows(row, cluster_flow_columns)
+                actual_average_flow = calculate_actual_average_flow(active_flows)
+                active_cluster_count = len(active_flows)
+                if not should_keep_row(row, actual_average_flow, stats):
                     continue
 
-                batch_rows.append([row.get(column) for column in column_names])
+                batch_rows.append(
+                    [row.get(column) for column in column_names]
+                    + [actual_average_flow, active_cluster_count]
+                )
                 stats["kept_rows"] += 1
 
                 if len(batch_rows) >= INSERT_BATCH_SIZE:
-                    batch_insert_rows(cursor, column_names, batch_rows)
+                    batch_insert_rows(cursor, insert_column_names, batch_rows)
                     batch_rows = []
 
             if batch_rows:
-                batch_insert_rows(cursor, column_names, batch_rows)
+                batch_insert_rows(cursor, insert_column_names, batch_rows)
 
             connection.commit()
 
@@ -164,17 +185,20 @@ def clean_runtime_table(database_info):
 
     print("Cleaning rules:")
     print("  1. SetFrequencylPumpSet1 > 0")
-    print("  2. ActFlowPumpSET1_process > 0")
-    print("  3. sum(string01~21.ElectrolyteFlowAverage) > 0")
-    print("  4. process flow and cluster-flow sum are not contradictory")
+    print("  2. ActualAverageFlow > 0")
+    print(
+        f"     ActualAverageFlow = sum(cluster flows > {ACTIVE_CLUSTER_FLOW_THRESHOLD}) "
+        f"/ count(cluster flows > {ACTIVE_CLUSTER_FLOW_THRESHOLD})"
+    )
+    print(
+        f"  3. ActiveClusterCount = count(cluster flows > {ACTIVE_CLUSTER_FLOW_THRESHOLD})"
+    )
     print(
         "Cleaning summary:"
         f" source_rows={stats['source_rows']},"
         f" kept_rows={stats['kept_rows']},"
         f" stopped_rows={stats['stopped_rows']},"
-        f" low_process_rows={stats['low_process_rows']},"
-        f" low_output_rows={stats['low_output_rows']},"
-        f" contradictory_rows={stats['contradictory_rows']}"
+        f" zero_average_flow_rows={stats['zero_average_flow_rows']}"
     )
     print(f"Exact row count in {TARGET_TABLE}: {exact_row_count}")
 

@@ -37,6 +37,7 @@ RECREATE_TABLES = True
 MYSQL_IDENTIFIER_MAX_LENGTH = 64
 SCHEMA_SAMPLE_SIZE = 2000
 USE_LOAD_DATA_LOCAL = True
+LOAD_DATA_DISABLED_DETECTED = False
 
 DATABASE_CONFIG = {
     "mark": "sya_zhiqing_djyflow",
@@ -46,6 +47,15 @@ DATABASE_CONFIG = {
     "port": 3306,
     "db": "ec_wlzq",
 }
+
+
+def build_temp_table_name(table_name):
+    return f"{table_name}__importing"
+
+
+def is_local_infile_disabled_error(exc):
+    message = str(exc).lower()
+    return "loading local data is disabled" in message or "local infile" in message
 
 
 def get_connection():
@@ -182,6 +192,8 @@ def parse_bool_value(value):
         return 1
     if number == 0:
         return 0
+    if number == 0.5:
+        return 1
     return None
 
 
@@ -386,33 +398,72 @@ def insert_rows(connection, cursor, table_name, headers, schema, rows, column_na
     connection.commit()
 
 
+def replace_table(cursor, temp_table_name, final_table_name):
+    cursor.execute(f"DROP TABLE IF EXISTS {quote_identifier(final_table_name)}")
+    cursor.execute(
+        f"RENAME TABLE {quote_identifier(temp_table_name)} "
+        f"TO {quote_identifier(final_table_name)}"
+    )
+
+
 def import_csv_file(connection, file_path):
-    headers, sample_rows = read_csv_headers_and_samples(file_path)
-    if not headers:
-        print(f"Skip empty header file: {file_path.name}")
-        return
+    global LOAD_DATA_DISABLED_DETECTED
 
     table_name = file_path.stem
-    schema = build_schema(headers, sample_rows)
-    column_name_map = build_identifier_map(headers)
+    temp_table_name = build_temp_table_name(table_name)
     imported_rows = None
 
-    with connection.cursor() as cursor:
-        create_table(cursor, table_name, headers, schema, column_name_map)
-        if USE_LOAD_DATA_LOCAL:
+    should_try_load_data = USE_LOAD_DATA_LOCAL and not LOAD_DATA_DISABLED_DETECTED
+
+    if should_try_load_data:
+        headers, sample_rows = read_csv_headers_and_samples(file_path)
+        if not headers:
+            print(f"Skip empty header file: {file_path.name}")
+            return {"file": file_path.name, "table": table_name, "status": "skipped", "rows": 0}
+
+        schema = build_schema(headers, sample_rows)
+        column_name_map = build_identifier_map(headers)
+
+        with connection.cursor() as cursor:
+            cursor.execute(f"DROP TABLE IF EXISTS {quote_identifier(temp_table_name)}")
+            create_table(cursor, temp_table_name, headers, schema, column_name_map)
             try:
                 imported_rows = load_rows_with_local_infile(
-                    cursor, table_name, headers, schema, column_name_map, file_path
+                    cursor, temp_table_name, headers, schema, column_name_map, file_path
                 )
                 connection.commit()
             except Exception as exc:
                 connection.rollback()
-                print(f"LOAD DATA fallback for {file_path.name}: {exc}")
+                if is_local_infile_disabled_error(exc):
+                    LOAD_DATA_DISABLED_DETECTED = True
+                    print(
+                        "LOAD DATA LOCAL INFILE is disabled on the database server. "
+                        "Switching to regular batch inserts for the remaining files."
+                    )
+                else:
+                    print(f"LOAD DATA fallback for {file_path.name}: {exc}")
+                imported_rows = None
 
-        if imported_rows is None:
-            _, rows = read_csv_file(file_path)
-            insert_rows(connection, cursor, table_name, headers, schema, rows, column_name_map)
+    if imported_rows is None:
+        headers, rows = read_csv_file(file_path)
+        if not headers:
+            print(f"Skip empty header file: {file_path.name}")
+            return {"file": file_path.name, "table": table_name, "status": "skipped", "rows": 0}
+
+        schema = build_schema(headers, rows)
+        column_name_map = build_identifier_map(headers)
+
+        with connection.cursor() as cursor:
+            cursor.execute(f"DROP TABLE IF EXISTS {quote_identifier(temp_table_name)}")
+            create_table(cursor, temp_table_name, headers, schema, column_name_map)
+            insert_rows(connection, cursor, temp_table_name, headers, schema, rows, column_name_map)
             imported_rows = len(rows)
+            replace_table(cursor, temp_table_name, table_name)
+            connection.commit()
+    else:
+        with connection.cursor() as cursor:
+            replace_table(cursor, temp_table_name, table_name)
+            connection.commit()
 
     renamed_columns = [
         (source_name, target_name)
@@ -425,6 +476,7 @@ def import_csv_file(connection, file_path):
             print(f"  {source_name} -> {target_name}")
 
     print(f"Imported {file_path.name} -> {table_name} ({imported_rows} rows)")
+    return {"file": file_path.name, "table": table_name, "status": "success", "rows": imported_rows}
 
 
 def iter_csv_files():
@@ -449,15 +501,31 @@ def main():
     )
 
     connection = get_connection()
+    results = []
     try:
         for file_path in csv_files:
             try:
-                import_csv_file(connection, file_path)
+                results.append(import_csv_file(connection, file_path))
             except Exception as exc:
                 connection.rollback()
                 print(f"Failed to import {file_path.name}: {exc}")
+                results.append(
+                    {"file": file_path.name, "table": file_path.stem, "status": "failed", "error": str(exc)}
+                )
     finally:
         connection.close()
+
+    success_count = sum(1 for result in results if result["status"] == "success")
+    skipped_count = sum(1 for result in results if result["status"] == "skipped")
+    failed_results = [result for result in results if result["status"] == "failed"]
+
+    print(
+        f"Import summary: success={success_count}, skipped={skipped_count}, failed={len(failed_results)}"
+    )
+    if failed_results:
+        print("Failed files:")
+        for result in failed_results:
+            print(f"  {result['file']} -> {result['error']}")
 
     print("Import finished.")
 
