@@ -1,28 +1,16 @@
 {
-  "mark": "sya_zhiqing_set1_flowavg",
+  "mark": "sya_ec_zq_set1_flow",
   "host": "172.20.68.118",
   "user": "root",
   "password": "uwXXsnbcCRk5",
   "port": 3306,
   "db": "ec_wlzq",
-  "table": "zhiqing_control_2025-04-16",
+  "table": "dataclean",
   "tables": [
-    "zhiqing_control_2025-03-07",
-    "zhiqing_control_2025-03-08",
-    "zhiqing_control_2025-03-09",
-    "zhiqing_control_2025-03-10",
-    "zhiqing_control_2025-03-11",
-    "zhiqing_control_2025-03-12",
-    "zhiqing_control_2025-03-13",
-    "zhiqing_control_2025-03-14",
-    "zhiqing_control_2025-03-26",
-    "zhiqing_control_2025-04-10",
-    "zhiqing_control_2025-04-14",
-    "zhiqing_control_2025-04-15",
-    "zhiqing_control_2025-04-16"
+    "dataclean"
   ],
-  "time_column": "_time",
-  "order_by_column": "_time",
+  "time_column": "time",
+  "order_by_column": "id",
   "input_output_vars_info": {
     "output_var": [
       "string01.ElectrolyteFlowAverage",
