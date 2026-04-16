@@ -1,13 +1,13 @@
 {
-  "mark": "sya_ec_zq_set1_avgflow",
+  "mark": "sya_ec_zq_set1_totalflow",
   "host": "172.20.68.118",
   "user": "root",
   "password": "uwXXsnbcCRk5",
   "port": 3306,
   "db": "ec_wlzq",
-  "table": "dataclean",
+  "table": "dataclean_stream",
   "tables": [
-    "dataclean"
+    "dataclean_stream"
   ],
   "time_column": "time",
   "order_by_column": "id",
@@ -27,6 +27,8 @@
     "constant_term_value": 5315,
     "nonlinearInput_vars_orders": {
       "ActiveClusterCount": [
+        3,
+        2,
         1
       ],
       "Actual_Pump_SET1": [
