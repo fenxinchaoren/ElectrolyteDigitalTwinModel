@@ -11,8 +11,8 @@ BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = BASE_DIR / "getData_database_info.json"
 SOURCE_TABLE = "dataclean_yanzheng"
 STREAM_TABLE = "dataclean_stream"
-SOURCE_ID_START = 10000
-INITIAL_ROWS = 1000
+SOURCE_ID_START = 0
+INITIAL_ROWS = 500
 # Replay a little faster than现场速度, but slow enough for `e_edge_predict.py` to keep up.
 BATCH_SIZE = 50
 INTERVAL_SECONDS = 5.0

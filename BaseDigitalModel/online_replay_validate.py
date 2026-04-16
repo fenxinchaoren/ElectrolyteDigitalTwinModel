@@ -11,7 +11,6 @@ BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = BASE_DIR / "getData_database_info.json"
 OUTPUT_DIR = BASE_DIR / "online_replay_results"
 SOURCE_TABLE = "dataclean_yanzheng"
-MIN_SOURCE_ID_FOR_EVAL = 10000
 
 
 def quote_identifier(name):
@@ -70,13 +69,12 @@ def fetch_joined_rows(config):
             ON t1.id = t2.max_id
         ) AS o
         ON s.time = o.time
-        WHERE s.id > %s
         ORDER BY s.id
     """
 
     with get_connection(config) as connection:
         with connection.cursor() as cursor:
-            cursor.execute(sql, (MIN_SOURCE_ID_FOR_EVAL,))
+            cursor.execute(sql)
             return cursor.fetchall()
 
 
@@ -125,7 +123,16 @@ def save_csv(rows, output_path):
 def main():
     config = load_config()
     mark = config["mark"]
+    output_vars = config["input_output_vars_info"]["output_var"]
     OUTPUT_DIR.mkdir(exist_ok=True)
+
+    if len(output_vars) != 1:
+        print(
+            "online_replay_validate.py currently validates the single-output online replay table only. "
+            "Your current config is multi-output, so please use offline_predict.py first and confirm "
+            "whether the encrypted online pipeline supports multi-output training/inference."
+        )
+        return
 
     rows = fetch_joined_rows(config)
     if not rows:
@@ -150,7 +157,6 @@ def main():
     plot_rows(rows, png_path)
 
     print(f"Joined validation rows: {len(rows)}")
-    print(f"Evaluation source_id threshold: > {MIN_SOURCE_ID_FOR_EVAL}")
     print(f"Validation CSV saved to: {csv_path}")
     print(f"Trend plot saved to: {png_path}")
     print("Edge metrics:")

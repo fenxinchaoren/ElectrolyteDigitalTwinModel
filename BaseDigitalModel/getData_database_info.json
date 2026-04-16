@@ -1,5 +1,5 @@
 {
-  "mark": "sya_ec_zq_set1_totalflow2",
+  "mark": "sya_ec_zq_set1_clusterflow21",
   "host": "172.20.68.118",
   "user": "root",
   "password": "uwXXsnbcCRk5",
@@ -13,7 +13,27 @@
   "order_by_column": "id",
   "input_output_vars_info": {
     "output_var": [
-      "ActFlowPumpSET1_process"
+      "string01.ElectrolyteFlowAverage",
+      "string02.ElectrolyteFlowAverage",
+      "string03.ElectrolyteFlowAverage",
+      "string04.ElectrolyteFlowAverage",
+      "string05.ElectrolyteFlowAverage",
+      "string06.ElectrolyteFlowAverage",
+      "string07.ElectrolyteFlowAverage",
+      "string08.ElectrolyteFlowAverage",
+      "string09.ElectrolyteFlowAverage",
+      "string10.ElectrolyteFlowAverage",
+      "string11.ElectrolyteFlowAverage",
+      "string12.ElectrolyteFlowAverage",
+      "string13.ElectrolyteFlowAverage",
+      "string14.ElectrolyteFlowAverage",
+      "string15.ElectrolyteFlowAverage",
+      "string16.ElectrolyteFlowAverage",
+      "string17.ElectrolyteFlowAverage",
+      "string18.ElectrolyteFlowAverage",
+      "string19.ElectrolyteFlowAverage",
+      "string20.ElectrolyteFlowAverage",
+      "string21.ElectrolyteFlowAverage"
     ],
     "linearInput_vars_orders": {
       "SetFrequencylPumpSet1": [
@@ -32,18 +52,24 @@
         1
       ],
       "Actual_Pump_SET1": [
+        2,
         1
       ],
       "SET1_Electrolyte_Pressure_After": [
+        2,
         1
       ],
       "SET1_Electrolyte_Pressure_Before": [
+        2,
         1
       ],
       "SET1_Electrolyte_Temperature": [
         1
       ],
       "WaterTank_Temperature": [
+        1
+      ],
+      "WaterTank_LiquidLevel": [
         1
       ],
       "string01.ActualCurrent": [
