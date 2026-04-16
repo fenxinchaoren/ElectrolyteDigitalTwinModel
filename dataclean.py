@@ -167,15 +167,19 @@ def calculate_actual_average_flow(active_flows):
     return sum(positive_flows) / len(positive_flows)
 
 
-def should_keep_row(row, total_cluster_flow, stats):
+def should_keep_row(row, total_cluster_flow, active_cluster_count, stats):
     set_frequency = normalize_number(row.get("SetFrequencylPumpSet1"))
 
     if set_frequency <= 0:
         stats["stopped_rows"] += 1
         return False
 
-    if total_cluster_flow <= 0:
-        stats["zero_total_flow_rows"] += 1
+    if total_cluster_flow <= 15:
+        stats["low_total_flow_rows"] += 1
+        return False
+
+    if active_cluster_count <= 0:
+        stats["zero_active_cluster_rows"] += 1
         return False
 
     return True
@@ -202,7 +206,8 @@ def clean_runtime_table(database_info):
                 "source_rows": 0,
                 "kept_rows": 0,
                 "stopped_rows": 0,
-                "zero_total_flow_rows": 0,
+                "low_total_flow_rows": 0,
+                "zero_active_cluster_rows": 0,
             }
             batch_rows = []
             insert_column_names = column_names + [AVERAGE_FLOW_COLUMN, ACTIVE_CLUSTER_COUNT_COLUMN]
@@ -214,7 +219,7 @@ def clean_runtime_table(database_info):
                 total_cluster_flow = calculate_total_cluster_flow(cluster_flows)
                 actual_average_flow = calculate_actual_average_flow(active_flows)
                 active_cluster_count = len(active_flows)
-                if not should_keep_row(row, total_cluster_flow, stats):
+                if not should_keep_row(row, total_cluster_flow, active_cluster_count, stats):
                     continue
 
                 row_values = []
@@ -247,21 +252,22 @@ def clean_runtime_table(database_info):
 
     print("Cleaning rules:")
     print("  1. SetFrequencylPumpSet1 > 0")
-    print("  2. ActFlowPumpSET1_process > 0")
+    print("  2. ActFlowPumpSET1_process > 15")
     print("     ActFlowPumpSET1_process = sum(all stringXX.ElectrolyteFlowAverage)")
     print(
-        f"  3. ActualAverageFlow = sum(cluster flows > {ACTIVE_CLUSTER_FLOW_THRESHOLD}) "
-        f"/ count(cluster flows > {ACTIVE_CLUSTER_FLOW_THRESHOLD})"
+        f"  3. ActiveClusterCount > 0, where ActiveClusterCount = count(cluster flows > {ACTIVE_CLUSTER_FLOW_THRESHOLD})"
     )
     print(
-        f"  4. ActiveClusterCount = count(cluster flows > {ACTIVE_CLUSTER_FLOW_THRESHOLD})"
+        f"  4. ActualAverageFlow = sum(cluster flows > {ACTIVE_CLUSTER_FLOW_THRESHOLD}) "
+        f"/ count(cluster flows > {ACTIVE_CLUSTER_FLOW_THRESHOLD})"
     )
     print(
         "Cleaning summary:"
         f" source_rows={stats['source_rows']},"
         f" kept_rows={stats['kept_rows']},"
         f" stopped_rows={stats['stopped_rows']},"
-        f" zero_total_flow_rows={stats['zero_total_flow_rows']}"
+        f" low_total_flow_rows={stats['low_total_flow_rows']},"
+        f" zero_active_cluster_rows={stats['zero_active_cluster_rows']}"
     )
     print(f"Exact row count in {TARGET_TABLE}: {exact_row_count}")
     print(f"Exact row count in {VALIDATION_TABLE}: {validation_row_count}")

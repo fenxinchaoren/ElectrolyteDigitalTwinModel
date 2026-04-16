@@ -13,7 +13,7 @@
   "order_by_column": "id",
   "input_output_vars_info": {
     "output_var": [
-      "ActualAverageFlow"
+      "ActFlowPumpSET1_process"
     ],
     "linearInput_vars_orders": {
       "SetFrequencylPumpSet1": [

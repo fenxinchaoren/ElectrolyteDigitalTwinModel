@@ -13,8 +13,8 @@ SOURCE_TABLE = "dataclean_yanzheng"
 STREAM_TABLE = "dataclean_stream"
 INITIAL_ROWS = 500
 BATCH_SIZE = 100
-INTERVAL_SECONDS = 0.2
-WARMUP_SECONDS_AFTER_PRELOAD = 1.0
+INTERVAL_SECONDS = 2.0
+WARMUP_SECONDS_AFTER_PRELOAD = 2.0
 RESET_STREAM_TABLE = True
 RESET_RESULT_TABLES = True
 
@@ -132,21 +132,20 @@ def main():
                 connection.commit()
                 inserted_rows += len(batch_rows)
 
-            if inserted_rows % 500 == 0 or inserted_rows == total_rows:
-                elapsed = max(time.time() - start_time, 1e-6)
-                streamed_after_preload = max(inserted_rows - preload_rows, 0)
-                speed = streamed_after_preload / elapsed if streamed_after_preload else 0.0
-                remaining_rows = max(total_rows - inserted_rows, 0)
-                eta_seconds = remaining_rows / speed if speed > 0 else float("inf")
-                eta_text = (
-                    f"{math.ceil(eta_seconds)}s"
-                    if math.isfinite(eta_seconds)
-                    else "unknown"
-                )
-                print(
-                    f"Streamed {inserted_rows}/{total_rows} rows into {STREAM_TABLE} "
-                    f"at ~{speed:.1f} rows/s, ETA {eta_text}."
-                )
+            elapsed = max(time.time() - start_time, 1e-6)
+            streamed_after_preload = max(inserted_rows - preload_rows, 0)
+            speed = streamed_after_preload / elapsed if streamed_after_preload else 0.0
+            remaining_rows = max(total_rows - inserted_rows, 0)
+            eta_seconds = remaining_rows / speed if speed > 0 else float("inf")
+            eta_text = (
+                f"{math.ceil(eta_seconds)}s"
+                if math.isfinite(eta_seconds)
+                else "unknown"
+            )
+            print(
+                f"Streamed {inserted_rows}/{total_rows} rows into {STREAM_TABLE} "
+                f"at ~{speed:.1f} rows/s, ETA {eta_text}."
+            )
             time.sleep(INTERVAL_SECONDS)
 
     print(f"Replay finished. {STREAM_TABLE} now contains {total_rows} rows.")
