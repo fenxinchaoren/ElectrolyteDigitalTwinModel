@@ -11,11 +11,12 @@ BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = BASE_DIR / "getData_database_info.json"
 SOURCE_TABLE = "dataclean_yanzheng"
 STREAM_TABLE = "dataclean_stream"
+SOURCE_ID_START = 10000
 INITIAL_ROWS = 1000
 # Replay a little faster than现场速度, but slow enough for `e_edge_predict.py` to keep up.
 BATCH_SIZE = 50
-INTERVAL_SECONDS = 3.0
-WARMUP_SECONDS_AFTER_PRELOAD = 5.0
+INTERVAL_SECONDS = 5.0
+WARMUP_SECONDS_AFTER_PRELOAD = 8.0
 RESET_STREAM_TABLE = True
 RESET_RESULT_TABLES = True
 
@@ -56,6 +57,15 @@ def create_stream_table(cursor):
     )
 
 
+def get_source_row_count(cursor, table_name):
+    cursor.execute(
+        f"SELECT COUNT(*) AS row_count FROM {quote_identifier(table_name)} "
+        "WHERE `id` > %s",
+        (SOURCE_ID_START,),
+    )
+    return int(cursor.fetchone()["row_count"])
+
+
 def clear_online_result_tables(cursor, mark):
     if not RESET_RESULT_TABLES:
         return
@@ -74,9 +84,10 @@ def fetch_rows(cursor, table_name, column_names, offset, limit):
     cursor.execute(
         f"SELECT {', '.join(quote_identifier(column) for column in column_names)} "
         f"FROM {quote_identifier(table_name)} "
+        "WHERE `id` > %s "
         "ORDER BY `id` "
         "LIMIT %s OFFSET %s",
-        (limit, offset),
+        (SOURCE_ID_START, limit, offset),
     )
     return cursor.fetchall()
 
@@ -105,8 +116,7 @@ def main():
             create_stream_table(cursor)
             clear_online_result_tables(cursor, mark)
 
-            cursor.execute(f"SELECT COUNT(*) AS row_count FROM {quote_identifier(SOURCE_TABLE)}")
-            total_rows = int(cursor.fetchone()["row_count"])
+            total_rows = get_source_row_count(cursor, SOURCE_TABLE)
 
             preload_rows = min(INITIAL_ROWS, total_rows)
             initial_batch = fetch_rows(cursor, SOURCE_TABLE, source_columns, 0, preload_rows)
@@ -114,7 +124,8 @@ def main():
             connection.commit()
 
             print(
-                f"Prepared {STREAM_TABLE} with {preload_rows}/{total_rows} initial rows from {SOURCE_TABLE}."
+                f"Prepared {STREAM_TABLE} with {preload_rows}/{total_rows} initial rows from "
+                f"{SOURCE_TABLE} where source_id > {SOURCE_ID_START}."
             )
             print(
                 "Start or keep `python e_edge_predict.py` running now. "

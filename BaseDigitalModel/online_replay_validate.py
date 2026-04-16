@@ -11,6 +11,7 @@ BASE_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = BASE_DIR / "getData_database_info.json"
 OUTPUT_DIR = BASE_DIR / "online_replay_results"
 SOURCE_TABLE = "dataclean_yanzheng"
+MIN_SOURCE_ID_FOR_EVAL = 10000
 
 
 def quote_identifier(name):
@@ -69,12 +70,13 @@ def fetch_joined_rows(config):
             ON t1.id = t2.max_id
         ) AS o
         ON s.time = o.time
+        WHERE s.id > %s
         ORDER BY s.id
     """
 
     with get_connection(config) as connection:
         with connection.cursor() as cursor:
-            cursor.execute(sql)
+            cursor.execute(sql, (MIN_SOURCE_ID_FOR_EVAL,))
             return cursor.fetchall()
 
 
@@ -148,6 +150,7 @@ def main():
     plot_rows(rows, png_path)
 
     print(f"Joined validation rows: {len(rows)}")
+    print(f"Evaluation source_id threshold: > {MIN_SOURCE_ID_FOR_EVAL}")
     print(f"Validation CSV saved to: {csv_path}")
     print(f"Trend plot saved to: {png_path}")
     print("Edge metrics:")
